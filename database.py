@@ -1,15 +1,15 @@
 # database.py
 import sqlite3
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 
 DB_PATH = "bot_data.db"
 
 def init_db():
-    """Inicializa o banco de dados criando as tabelas necessárias."""
+    """Inicializa o banco de dados e adiciona colunas faltantes (migração)."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # Tabela para mensagens de formulário persistentes (com canais configurados)
+    # Tabela para mensagens de formulário persistentes (estrutura base)
     c.execute('''
         CREATE TABLE IF NOT EXISTS persistent_formularios (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -18,11 +18,21 @@ def init_db():
             custom_id TEXT NOT NULL,
             embed_title TEXT,
             embed_description TEXT,
-            embed_color INTEGER,
-            formulario_channel_id INTEGER,
-            resultados_channel_id INTEGER
+            embed_color INTEGER
         )
     ''')
+
+    # Migração: adicionar colunas que podem faltar
+    c.execute("PRAGMA table_info(persistent_formularios)")
+    existing_cols = [col[1] for col in c.fetchall()]
+
+    if "formulario_channel_id" not in existing_cols:
+        c.execute("ALTER TABLE persistent_formularios ADD COLUMN formulario_channel_id INTEGER")
+        print("Migração: coluna 'formulario_channel_id' adicionada.")
+
+    if "resultados_channel_id" not in existing_cols:
+        c.execute("ALTER TABLE persistent_formularios ADD COLUMN resultados_channel_id INTEGER")
+        print("Migração: coluna 'resultados_channel_id' adicionada.")
 
     # Tabela para tickets ativos
     c.execute('''
@@ -43,7 +53,6 @@ def add_persistent_formulario(channel_id: int, message_id: int, custom_id: str,
                               embed_color: int = None,
                               formulario_channel_id: int = None,
                               resultados_channel_id: int = None) -> None:
-    """Salva uma mensagem de formulário com seus canais configurados."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -57,7 +66,6 @@ def add_persistent_formulario(channel_id: int, message_id: int, custom_id: str,
     conn.close()
 
 def remove_persistent_formulario(message_id: int) -> None:
-    """Remove uma mensagem de formulário persistente pelo ID da mensagem."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM persistent_formularios WHERE message_id = ?", (message_id,))
@@ -65,7 +73,6 @@ def remove_persistent_formulario(message_id: int) -> None:
     conn.close()
 
 def get_all_persistent_formularios() -> List[Tuple]:
-    """Retorna todas as mensagens de formulário persistentes."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -79,7 +86,6 @@ def get_all_persistent_formularios() -> List[Tuple]:
 
 # ====== Funções para tickets ativos ======
 def add_active_ticket(channel_id: int, user_id: int, welcome_message_id: int) -> None:
-    """Adiciona um ticket ativo ao banco."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute('''
@@ -90,7 +96,6 @@ def add_active_ticket(channel_id: int, user_id: int, welcome_message_id: int) ->
     conn.close()
 
 def remove_active_ticket(channel_id: int) -> None:
-    """Remove um ticket ativo do banco (quando fechado ou deletado)."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM active_tickets WHERE channel_id = ?", (channel_id,))
@@ -98,7 +103,6 @@ def remove_active_ticket(channel_id: int) -> None:
     conn.close()
 
 def get_all_active_tickets() -> List[Tuple]:
-    """Retorna todos os tickets ativos (channel_id, user_id, welcome_message_id)."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("SELECT channel_id, user_id, welcome_message_id FROM active_tickets")
