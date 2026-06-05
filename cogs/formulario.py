@@ -26,12 +26,12 @@ class MotivoRecusaModal(Modal, title="Motivo da Recusa"):
 
     async def on_submit(self, interaction: discord.Interaction):
         await self.cog.processar_recusa(
-            interaction, 
-            self.user_id, 
+            interaction,
+            self.user_id,
             self.user_name,
-            self.nick, 
-            self.classe, 
-            self.recrutador, 
+            self.nick,
+            self.classe,
+            self.recrutador,
             self.motivo.value
         )
 
@@ -45,7 +45,7 @@ class AprovacaoView(View):
         self.nick = nick
         self.classe = classe
         self.recrutador = recrutador
-        
+
         aprovar_btn = Button(
             style=discord.ButtonStyle.success,
             label="✅ Aprovar",
@@ -53,7 +53,7 @@ class AprovacaoView(View):
         )
         aprovar_btn.callback = self.aprovar_callback
         self.add_item(aprovar_btn)
-        
+
         recusar_btn = Button(
             style=discord.ButtonStyle.danger,
             label="❌ Recusar",
@@ -61,36 +61,36 @@ class AprovacaoView(View):
         )
         recusar_btn.callback = self.recusar_callback
         self.add_item(recusar_btn)
-    
+
     async def aprovar_callback(self, interaction: discord.Interaction):
         if not await self.cog.verificar_permissao_aprovacao(interaction):
             return await interaction.response.send_message(
                 "❌ Você não tem permissão para aprovar formulários!",
                 ephemeral=True
             )
-        
+
         await self.cog.processar_aprovacao(
-            interaction, 
-            self.user_id, 
+            interaction,
+            self.user_id,
             self.user_name,
-            self.nick, 
-            self.classe, 
+            self.nick,
+            self.classe,
             self.recrutador
         )
-    
+
     async def recusar_callback(self, interaction: discord.Interaction):
         if not await self.cog.verificar_permissao_aprovacao(interaction):
             return await interaction.response.send_message(
                 "❌ Você não tem permissão para recusar formulários!",
                 ephemeral=True
             )
-        
+
         modal = MotivoRecusaModal(
-            self.cog, 
-            self.user_id, 
+            self.cog,
+            self.user_id,
             self.user_name,
-            self.nick, 
-            self.classe, 
+            self.nick,
+            self.classe,
             self.recrutador
         )
         await interaction.response.send_modal(modal)
@@ -135,14 +135,14 @@ class RegrasView(View):
         self.nick = nick
         self.classe = classe
         self.recrutador = recrutador
-        
+
         select_regras = Select(
             placeholder="Selecione sua resposta...",
             min_values=1,
             max_values=1,
             options=[
                 discord.SelectOption(
-                    label="Eu compreendo!", 
+                    label="Eu compreendo!",
                     value="EU_COMPREENDO",
                     description="Confirmo que compreendo todas as regras",
                 )
@@ -150,13 +150,13 @@ class RegrasView(View):
         )
         select_regras.callback = self.regras_callback
         self.add_item(select_regras)
-    
+
     async def regras_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         await self.cog.enviar_formulario_aprovacao(
-            interaction, 
-            self.nick, 
-            self.classe, 
+            interaction,
+            self.nick,
+            self.classe,
             self.recrutador
         )
 
@@ -166,22 +166,22 @@ class FormularioCog(commands.Cog):
         self.bot = bot
         self.formulario_channel = None
         self.resultados_channel = None
-        
+
         self.CARGOS_POR_CLASSE = {
             "DPS": 1440390981307465949,
             "TANK": 1440391288615735380,
             "HEALER": 1440391235268378654,
         }
         self.CARGO_FIXO_ID = 1440392071910264853
-        
+
         # CARGO QUE SERÁ REMOVIDO AO APROVAR O FORMULÁRIO
         self.CARGO_A_REMOVER_ID = 779618880028803083
-        
+
         self.CARGOS_PERMITIDOS = [
             1449931317675429960,  # Dev
             1442625294078050456,   # Staff
         ]
-        
+
         self.CARGOS_APROVACAO = [
             1449931317675429960,  # Dev
             1442625294078050456,   # Staff
@@ -196,16 +196,16 @@ class FormularioCog(commands.Cog):
         canal_formulario="Canal onde o formulário será enviado",
         canal_resultados="Canal onde os resultados serão enviados"
     )
-    async def config_formulario(self, interaction: discord.Interaction, 
-                             canal_formulario: discord.TextChannel, 
+    async def config_formulario(self, interaction: discord.Interaction,
+                             canal_formulario: discord.TextChannel,
                              canal_resultados: discord.TextChannel):
-        
+
         if not await self.verificar_permissao_config(interaction):
             return await interaction.response.send_message(
                 "❌ Você não tem permissão para usar este comando!",
                 ephemeral=True
             )
-        
+
         self.formulario_channel = canal_formulario
         self.resultados_channel = canal_resultados
 
@@ -229,7 +229,7 @@ class FormularioCog(commands.Cog):
         )
         embed.set_thumbnail(url=self.bot.user.display_avatar.url)
         embed.set_footer(text="Guilda Wanted © | Community Server")
-        
+
         view = View(timeout=None)
         view.add_item(Button(
             label="Iniciar Formulário",
@@ -237,9 +237,9 @@ class FormularioCog(commands.Cog):
             custom_id="iniciar_formulario",
             emoji="📝"
         ))
-        
+
         await canal_formulario.send(embed=embed, view=view)
-        
+
         await interaction.response.send_message(
             f"✅ Formulário configurado com sucesso!\n"
             f"• Canal do formulário: {canal_formulario.mention}\n"
@@ -273,11 +273,11 @@ class FormularioCog(commands.Cog):
             color=0x5865f2
         )
         embed.set_footer(text="Guilda Wanted © | Community Server")
-        
+
         await interaction.response.send_message(
             embed=embed,
             view=RegrasView(
-                self, 
+                self,
                 modal.nick_ingame.value,
                 modal.classe.value,
                 modal.recrutador.value
@@ -292,29 +292,29 @@ class FormularioCog(commands.Cog):
             description=f"**Usuário:** {interaction.user.mention} (`{interaction.user}`)",
             color=0xfee75c
         )
-        
+
         embed.add_field(name="Nick In-Game", value=nick, inline=False)
         embed.add_field(name="Classe", value=classe, inline=False)
         embed.add_field(name="Recrutador(a)", value=recrutador, inline=False)
         embed.add_field(name="Regras Confirmadas", value="✅", inline=False)
         embed.add_field(name="Status", value="⏳ **Pendente de aprovação**", inline=False)
-        
+
         embed.set_footer(text="Guilda Wanted © | Community Server")
         embed.timestamp = datetime.now()
-        
+
         # Enviar para canal de resultados
         await self.resultados_channel.send(
             embed=embed,
             view=AprovacaoView(
-                self, 
+                self,
                 interaction.user.id,
                 str(interaction.user),
-                nick, 
-                classe, 
+                nick,
+                classe,
                 recrutador
             )
         )
-        
+
         confirmacao_embed = discord.Embed(
             title="Formulário Enviado! ✅",
             description="**Seu formulário foi enviado com sucesso, aguarde a aprovação!**\n\n"
@@ -324,52 +324,52 @@ class FormularioCog(commands.Cog):
         )
         confirmacao_embed.add_field(name="📋 Dados Enviados", value=f"**Nick:** {nick}\n**Classe:** {classe}\n**Recrutador:** {recrutador}", inline=False)
         confirmacao_embed.set_footer(text="Guilda Wanted © | Community Server")
-        
+
         await interaction.followup.send(embed=confirmacao_embed, ephemeral=True)
 
     # ====== VERIFICAÇÕES DE PERMISSÃO ======
     async def verificar_permissao_config(self, interaction: discord.Interaction):
         if interaction.user.guild_permissions.administrator:
             return True
-        
+
         for cargo_id in self.CARGOS_PERMITIDOS:
             cargo = interaction.guild.get_role(cargo_id)
             if cargo and cargo in interaction.user.roles:
                 return True
-        
+
         return False
-    
+
     async def verificar_permissao_aprovacao(self, interaction: discord.Interaction):
         if interaction.user.guild_permissions.administrator:
             return True
-        
+
         for cargo_id in self.CARGOS_APROVACAO:
             cargo = interaction.guild.get_role(cargo_id)
             if cargo and cargo in interaction.user.roles:
                 return True
-        
+
         return False
 
     # ====== FUNÇÃO PARA RECONHECER CLASSE PELAS 3 PRIMEIRAS LETRAS ======
     def reconhecer_classe(self, classe_input: str):
         """Reconhece a classe baseado nas 3 primeiras letras"""
         classe_limpa = classe_input.upper().strip()
-        
+
         # Se já for uma das classes completas
         for classe, cargo_id in self.CARGOS_POR_CLASSE.items():
             if classe_limpa == classe.upper():
                 return classe, cargo_id
-        
+
         # Verificar pelas 3 primeiras letras
         for classe, cargo_id in self.CARGOS_POR_CLASSE.items():
             if classe_limpa.startswith(classe.upper()[:3]):
                 return classe, cargo_id
-        
+
         # Tentativa extra: verificar se contém parte do nome
         for classe, cargo_id in self.CARGOS_POR_CLASSE.items():
             if classe.upper()[:3] in classe_limpa:
                 return classe, cargo_id
-        
+
         return None, None
 
     # ====== PROCESSAR APROVAÇÃO ======
@@ -377,23 +377,23 @@ class FormularioCog(commands.Cog):
         try:
             # CORREÇÃO: Resposta imediata para evitar timeout
             await interaction.response.defer(ephemeral=True)
-            
+
             user = await self.bot.fetch_user(user_id)
             member = interaction.guild.get_member(user_id)
-            
+
             if not member:
                 # Usar followup após defer
                 return await interaction.followup.send(
                     "❌ Usuário não encontrado no servidor!",
                     ephemeral=True
                 )
-            
+
             # USAR NOVO MÉTODO DE RECONHECIMENTO
             classe_reconhecida, cargo_classe_id = self.reconhecer_classe(classe)
-            
+
             if not classe_reconhecida:
                 classe_reconhecida = "Não reconhecida"
-            
+
             # REMOVER CARGO ESPECÍFICO
             cargo_removido = False
             cargo_a_remover = interaction.guild.get_role(self.CARGO_A_REMOVER_ID)
@@ -406,10 +406,10 @@ class FormularioCog(commands.Cog):
                     print(f"❌ Sem permissão para remover cargo do usuário {user_name}")
                 except Exception as e:
                     print(f"❌ Erro ao remover cargo: {e}")
-            
+
             # Atribuir cargos
             cargos_atribuidos = []
-            
+
             # Cargo fixo
             cargo_fixo = interaction.guild.get_role(self.CARGO_FIXO_ID)
             if cargo_fixo:
@@ -418,7 +418,7 @@ class FormularioCog(commands.Cog):
                     cargos_atribuidos.append(cargo_fixo.mention)
                 except discord.Forbidden:
                     pass
-            
+
             # Cargo por classe (se reconhecido)
             if cargo_classe_id:
                 cargo_especifico = interaction.guild.get_role(cargo_classe_id)
@@ -428,7 +428,7 @@ class FormularioCog(commands.Cog):
                         cargos_atribuidos.append(cargo_especifico.mention)
                     except discord.Forbidden:
                         pass
-            
+
             # Alterar nickname
             nick_alterado = False
             try:
@@ -436,14 +436,22 @@ class FormularioCog(commands.Cog):
                 nick_alterado = True
             except discord.Forbidden:
                 pass
-            
+
+            # Criar ticket
+            try:
+                ticket_cog = self.bot.get_cog("TicketCog")
+                if ticket_cog:
+                    await ticket_cog.criar_ticket(interaction, user_id, user_name, nick)
+            except Exception as e:
+                print(f"❌ Erro ao criar ticket: {e}")
+
             # Atualizar embed original
             embed = discord.Embed(
                 title=f"Formulário Aprovado ✅",
                 description=f"**Usuário:** {member.mention} (`{member}`)",
                 color=0x57f287
             )
-            
+
             embed.add_field(name="Nick In-Game", value=nick, inline=False)
             embed.add_field(name="Classe Informada", value=classe, inline=False)
             embed.add_field(name="Classe Reconhecida", value=classe_reconhecida, inline=False)
@@ -452,16 +460,16 @@ class FormularioCog(commands.Cog):
             embed.add_field(name="Nickname Alterado", value="Sim ✅" if nick_alterado else "Não ❌", inline=False)
             embed.add_field(name="Regras Confirmadas", value="Sim ✅", inline=False)
             embed.add_field(name="Aprovado por", value=interaction.user.mention, inline=False)
-            
+
             embed.set_footer(text="Guilda Wanted © | Community Server")
             embed.timestamp = datetime.now()
-            
+
             # Editar mensagem original
             await interaction.message.edit(embed=embed, view=None)
-            
+
             # REMOVIDO: Mensagem de confirmação para quem aprovou
             # Apenas fecha a interação sem enviar mensagem
-            
+
             # Enviar DM
             try:
                 dm_embed = discord.Embed(
@@ -473,42 +481,42 @@ class FormularioCog(commands.Cog):
                 await user.send(embed=dm_embed)
             except:
                 pass
-            
+
         except Exception as e:
             print(f"Erro ao aprovar formulário: {e}")
             # Apenas logar o erro sem enviar mensagem para o usuário
-    
+
     # ====== PROCESSAR RECUSA ======
     async def processar_recusa(self, interaction: discord.Interaction, user_id: int, user_name: str, nick: str, classe: str, recrutador: str, motivo: str):
         try:
             user = await self.bot.fetch_user(user_id)
-            
+
             # Atualizar embed original
             embed = discord.Embed(
                 title=f"❌ Formulário Recusado",
                 description=f"**Usuário:** <@{user_id}> (`{user_name}`)",
                 color=0xed4245
             )
-            
+
             embed.add_field(name="Nick In-Game", value=nick, inline=False)
             embed.add_field(name="Classe", value=classe, inline=False)
             embed.add_field(name="Recrutador(a)", value=recrutador, inline=False)
             embed.add_field(name="Regras Confirmadas", value="Sim ✅", inline=False)
             embed.add_field(name="Recusado por", value=interaction.user.mention, inline=False)
             embed.add_field(name="Motivo", value=motivo[:1024], inline=False)
-            
+
             embed.set_footer(text="Guilda Wanted © | Community Server")
             embed.timestamp = datetime.now()
-            
+
             # Editar mensagem original
             await interaction.message.edit(embed=embed, view=None)
-            
+
             # Enviar confirmação
             await interaction.response.send_message(
                 f"Formulário recusado com sucesso! ✅",
                 ephemeral=True
             )
-            
+
             # Enviar DM
             try:
                 dm_embed = discord.Embed(
@@ -523,7 +531,7 @@ class FormularioCog(commands.Cog):
                     f"<@{user_id}>, seu formulário foi recusado. "
                     f"Motivo: {motivo[:500]}... (habilite as DMs para mais detalhes)"
                 )
-            
+
         except Exception as e:
             print(f"Erro ao recusar formulário: {e}")
             await interaction.response.send_message(
@@ -542,12 +550,12 @@ class FormularioCog(commands.Cog):
                 "❌ Você não tem permissão para usar este comando!",
                 ephemeral=True
             )
-        
+
         embed = discord.Embed(
             title="⚙️ Status do Formulário",
             color=0x5865f2
         )
-        
+
         embed.add_field(
             name="Canal do Formulário",
             value=f"{self.formulario_channel.mention if self.formulario_channel else '❌ Não configurado'}",
@@ -558,9 +566,9 @@ class FormularioCog(commands.Cog):
             value=f"{self.resultados_channel.mention if self.resultados_channel else '❌ Não configurado'}",
             inline=False
         )
-        
+
         embed.set_footer(text="Guilda Wanted © | Community Server")
-        
+
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 async def setup(bot):
