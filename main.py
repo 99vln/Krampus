@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class YakuzaBot(commands.Bot):
+class Krampus(commands.Bot):
     def __init__(self):
         intents = discord.Intents.default()
         intents.message_content = True
@@ -40,7 +40,7 @@ token = os.getenv("DISCORD_TOKEN")
 if not token:
     raise ValueError("❌ Token não encontrado no arquivo .env!")
 
-bot = YakuzaBot()
+bot = Krampus()
 
 # Comando para sincronizar manualmente (opcional)
 @bot.command()
