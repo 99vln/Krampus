@@ -526,17 +526,17 @@ class FormularioCog(commands.Cog):
                 self.resultados_channel = self.bot.get_channel(result_channel_id)
 
         # Restaurar a view persistente
-        channel = self.bot.get_channel(channel_id)
-        if channel:
-            try:
-                message = await channel.fetch_message(message_id)
-                view = FormularioPersistentView(self)
-                self.bot.add_view(view, message_id=message_id)
-                print(f"View persistente restaurada: mensagem {message_id}")
-            except discord.NotFound:
+            channel = self.bot.get_channel(channel_id)
+            if channel:
+                try:
+                    message = await channel.fetch_message(message_id)
+                    view = FormularioPersistentView(self)
+                    self.bot.add_view(view, message_id=message_id)
+                    print(f"View persistente restaurada: mensagem {message_id}")
+                except discord.NotFound:
+                    db.remove_persistent_formulario(message_id)
+            else:
                 db.remove_persistent_formulario(message_id)
-        else:
-            db.remove_persistent_formulario(message_id)
 
 async def setup(bot):
     await bot.add_cog(FormularioCog(bot))
