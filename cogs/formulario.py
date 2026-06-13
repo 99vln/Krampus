@@ -306,7 +306,7 @@ class FormularioCog(commands.Cog):
         await self.resultados_channel.send(
             content=mentions or None,
             embed=embed,
-            View=AprovacaoView(
+            view=AprovacaoView(
                 self,
                 interaction.user.id,
                 str(interaction.user),
