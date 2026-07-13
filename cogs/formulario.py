@@ -517,21 +517,29 @@ class FormularioCog(commands.Cog):
     # ====== LISTENER PARA RESTAURAR VIEWS APÓS REINÍCIO ======
     @commands.Cog.listener()
     async def on_ready(self):
-        rows = db.get_all_persistent_formularios()
-        for (channel_id, message_id, custom_id, embed_title, embed_desc, embed_color,
-            form_channel_id, result_channel_id) in rows:
+        # Executar apenas uma vez (on_ready dispara a cada reconexão)
+        if getattr(self, "_views_restored", False):
+            return
+        self._views_restored = True
 
-        # Restaurar os canais configurados (se ainda não estiverem definidos)
+        formularios = db.get_all_persistent_formularios()
+        print(f"[DEBUG] Formulários carregados do banco: {len(formularios)}")
+
+        for form in formularios:
+            (channel_id, message_id, custom_id, embed_title, embed_description,
+             embed_color, form_channel_id, resultados_channel_id) = form
+
+            # RESTAURAR CANAIS CONFIGURADOS (FALTANTE - CORREÇÃO PRINCIPAL)
             if form_channel_id and not self.formulario_channel:
                 self.formulario_channel = self.bot.get_channel(form_channel_id)
-            if result_channel_id and not self.resultados_channel:
-                self.resultados_channel = self.bot.get_channel(result_channel_id)
+            if resultados_channel_id and not self.resultados_channel:
+                self.resultados_channel = self.bot.get_channel(resultados_channel_id)
 
-        # Restaurar a view persistente
+            # Restaurar a view persistente
             channel = self.bot.get_channel(channel_id)
             if channel:
                 try:
-                    message = await channel.fetch_message(message_id)
+                    await channel.fetch_message(message_id)
                     view = FormularioPersistentView(self)
                     self.bot.add_view(view, message_id=message_id)
                     print(f"View persistente restaurada: mensagem {message_id}")

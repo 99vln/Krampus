@@ -64,18 +64,13 @@ def init_db():
             print("[DB] Migração: coluna 'resultados_channel_id' adicionada")
 
         # --------------------------------------------------
-        # Tabela: active_tickets
-        # Armazena os canais de ticket ativos para que o bot
-        # possa reconhecê-los após reinício.
+        # Migração: adiciona coluna custom_id em active_tickets
         # --------------------------------------------------
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS active_tickets (
-                channel_id         INTEGER PRIMARY KEY,   -- canal do ticket (único por ticket)
-                user_id            INTEGER NOT NULL,      -- usuário dono do ticket
-                welcome_message_id INTEGER NOT NULL,      -- ID da mensagem de boas-vindas no ticket
-                created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        c.execute("PRAGMA table_info(active_tickets)")
+        existing_cols_tickets = [col[1] for col in c.fetchall()]
+        if "custom_id" not in existing_cols_tickets:
+            c.execute("ALTER TABLE active_tickets ADD COLUMN custom_id TEXT")
+            print("[DB] Migração: coluna 'custom_id' adicionada em active_tickets")
 
         #commit automatico ao sair do bloco `with` sem erros
 
@@ -156,24 +151,32 @@ def get_all_persistent_formularios() -> List[Tuple]:
 # FUNÇÕES: active_tickets
 # ======================================================
 
-def add_active_ticket(channel_id: int, user_id: int, welcome_message_id: int) -> None:
+def add_active_ticket(channel_id: int, user_id: int, welcome_message_id: int, custom_id: str = None) -> None:
     """
     Registra um ticket ativo no banco.
-    Usa INSERT OR REPLACE para sobrescrever caso o canal ja exista.
-
-    Atenção: o INSERT OR REPLACE deleta e recria a linha internamente,
-    o que reseta o campo `created_at`. Se isso for um problema,
-    considere usar INSERT OR IGNORE + UPDATE separados.
+    Usa INSERT OR IGNORE + UPDATE para não resetar o created_at.
     """
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute('''
-            INSERT OR REPLACE INTO active_tickets
-                (channel_id, user_id, welcome_message_id)
-            VALUES (?, ?, ?)
+            INSERT OR IGNORE INTO active_tickets
+                (channel_id, user_id, welcome_message_id, custom_id)
+            VALUES (?, ?, ?, ?)
         ''', (
             channel_id,
             user_id,
-            welcome_message_id
+            welcome_message_id,
+            custom_id
+        ))
+        # Se já existe, atualiza apenas os campos necessários
+        conn.execute('''
+            UPDATE active_tickets
+            SET user_id = ?, welcome_message_id = ?, custom_id = ?
+            WHERE channel_id = ?
+        ''', (
+            user_id,
+            welcome_message_id,
+            custom_id,
+            channel_id
         ))
 
 def remove_active_ticket(channel_id: int) -> None:
@@ -193,9 +196,9 @@ def get_all_active_tickets() -> List[Tuple]:
     Usado no on_ready para recarregar o estado dos tickets após reinício.
 
     Retorna uma lista de tuplas com:
-        (channel_id, user_id, welcome_message_id)
+        (channel_id, user_id, welcome_message_id, custom_id)
     """
     with sqlite3.connect(DB_PATH) as conn:
         c = conn.cursor()
-        c.execute("SELECT channel_id, user_id, welcome_message_id FROM active_tickets")
+        c.execute("SELECT channel_id, user_id, welcome_message_id, custom_id FROM active_tickets")
         return c.fetchall()

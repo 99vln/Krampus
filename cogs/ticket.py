@@ -112,7 +112,7 @@ class TicketCog(commands.Cog):
             # 7. Enviar com view persistente e salvar no banco
             view = TicketPersistentView(self)
             welcome_msg = await channel.send(embed=embed, view=view)
-            db.add_active_ticket(channel.id, user_id, welcome_msg.id)
+            db.add_active_ticket(channel.id, user_id, welcome_msg.id, custom_id="ticket_fechar,ticket_arquivar")
 
             print(f"✅ Ticket criado: {channel.name} (categoria {categoria.name}) para {user_name}")
             return channel
@@ -178,9 +178,14 @@ class TicketCog(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         """Restaura as views dos tickets ativos após reinicialização."""
+        # Executar apenas uma vez (on_ready dispara a cada reconexão)
+        if getattr(self, "_views_restored", False):
+            return
+        self._views_restored = True
+
         tickets = db.get_all_active_tickets()
         print(f"[DEBUG] Tickets carregados do banco: {len(tickets)} -> {tickets}")
-        for channel_id, user_id, welcome_msg_id in tickets:
+        for channel_id, user_id, welcome_msg_id, custom_id in tickets:
             channel = self.bot.get_channel(channel_id)
             if channel:
                 try:
