@@ -16,7 +16,17 @@ HEROES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "h
 # Índices compatíveis com datetime.weekday() (segunda = 0)
 DIAS_SEMANA = ["SEGUNDA", "TERÇA", "QUARTA", "QUINTA", "SEXTA", "SÁBADO", "DOMINGO"]
 
-LIMITES_POR_CLASSE = {"TANK": 1, "HEALER": 2, "DPS": 6}
+# Composição da party por modo de jogo
+MODOS = {
+    "heroes": {"TANK": 1, "HEALER": 2, "DPS": 6},
+    "andares": {"TANK": 1, "HEALER": 2, "DPS": 7},
+}
+
+# Modos que têm lista de espera (botão RESERVA)
+MODOS_COM_RESERVA = {"andares"}
+
+# Modos com puxada de fila (automática e /puxar); andares é só organização
+MODOS_COM_PUXADA = {"heroes"}
 
 # Prazos do ciclo de vida (sempre relativos ao horário AGENDADO da heroes)
 LEMBRETE_ANTECEDENCIAS_MIN = [15, 5]          # avisos antes de começar
@@ -58,10 +68,12 @@ class Heroes:
     criador_nome: str
     agendada_para: str                      # ISO 8601 com timezone
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
+    modo: str = "heroes"                    # "heroes" ou "andares" (ver MODOS)
     channel_id: int = 0
     message_id: int = 0
     dm_message_id: int = 0                  # DM "posso finalizar?" enviada ao criador
     participantes: list = field(default_factory=list)  # list[Participante]
+    reservas: list = field(default_factory=list)        # list[Participante] (fila de espera)
     # Flags de eventos já disparados (para não repetir após restart)
     lembretes_enviados: list = field(default_factory=list)  # ex: [15, 5]
     # Mensagens de lembrete enviadas: [{message_id, channel_id, apagar_em}]
@@ -73,37 +85,109 @@ class Heroes:
 
     # ---------- participantes ----------
 
+    @property
+    def limites(self) -> dict:
+        return MODOS.get(self.modo, MODOS["heroes"])
+
+    @property
+    def tem_reserva(self) -> bool:
+        return self.modo in MODOS_COM_RESERVA
+
+    @property
+    def tem_puxada(self) -> bool:
+        return self.modo in MODOS_COM_PUXADA
+
     def participante(self, user_id: int):
         for p in self.participantes:
             if p.user_id == user_id:
                 return p
         return None
 
+    def reserva(self, user_id: int):
+        for r in self.reservas:
+            if r.user_id == user_id:
+                return r
+        return None
+
     def por_classe(self, classe: str) -> list:
         return [p for p in self.participantes if p.classe == classe]
 
-    def adicionar(self, user_id: int, nome: str, cargos_ids: list, role_ids: dict):
-        """Retorna (sucesso, mensagem). `role_ids` = {"DPS": id, ...} vindo do config."""
-        classe = None
+    def _classe_de(self, cargos_ids: list, role_ids: dict):
         for nome_classe, role_id in role_ids.items():
             if role_id in cargos_ids:
-                classe = nome_classe
-                break
+                return nome_classe
+        return None
+
+    def adicionar(self, user_id: int, nome: str, cargos_ids: list, role_ids: dict):
+        """Retorna (sucesso, mensagem). `role_ids` = {"DPS": id, ...} vindo do config."""
+        classe = self._classe_de(cargos_ids, role_ids)
         if not classe:
             return False, "Você precisa ter um dos cargos: DPS, TANK ou HEALER para participar."
         if self.participante(user_id):
             return False, "Você já está participando!"
-        if len(self.por_classe(classe)) >= LIMITES_POR_CLASSE[classe]:
-            return False, f"Todos os slots de {classe} já estão preenchidos!"
+        r = self.reserva(user_id)
+        if len(self.por_classe(classe)) >= self.limites[classe]:
+            if r:
+                # Quem já espera na reserva não deve ser mandado para... a reserva
+                return False, (
+                    f"Você já está na reserva de {classe}; assim que vagar um "
+                    f"slot você sobe automaticamente!"
+                )
+            mensagem = f"Todos os slots de {classe} já estão preenchidos!"
+            if self.tem_reserva:
+                mensagem += " Use o botão RESERVA para entrar na lista de espera."
+            return False, mensagem
+        # Se estava na reserva e abriu vaga, sobe direto
+        if r:
+            self.reservas.remove(r)
+            self.participantes.append(Participante(user_id, nome, classe))
+            return True, f"Você saiu da reserva e entrou como {classe}!"
         self.participantes.append(Participante(user_id, nome, classe))
         return True, f"Você entrou como {classe}!"
 
+    def adicionar_reserva(self, user_id: int, nome: str, cargos_ids: list, role_ids: dict):
+        """Entra na lista de espera. Retorna (sucesso, mensagem)."""
+        if not self.tem_reserva:
+            return False, "Este alistamento não tem lista de reserva."
+        classe = self._classe_de(cargos_ids, role_ids)
+        if not classe:
+            return False, "Você precisa ter um dos cargos: DPS, TANK ou HEALER para participar."
+        if self.participante(user_id):
+            return False, "Você já está na party!"
+        if self.reserva(user_id):
+            return False, "Você já está na reserva!"
+        if len(self.por_classe(classe)) < self.limites[classe]:
+            return False, f"Ainda há vaga de {classe}! Use o botão PARTICIPAR."
+        self.reservas.append(Participante(user_id, nome, classe))
+        return True, (
+            f"Você entrou na RESERVA como {classe}. "
+            f"Se vagar um slot, você sobe automaticamente!"
+        )
+
     def remover(self, user_id: int):
+        """Sai da party ou da reserva. Retorna (sucesso, mensagem, promovido):
+        `promovido` é o Participante da reserva que subiu para a vaga aberta."""
         p = self.participante(user_id)
-        if not p:
-            return False, "Você não estava participando."
-        self.participantes.remove(p)
-        return True, "Você saiu do alistamento!"
+        if p:
+            self.participantes.remove(p)
+            promovido = self._promover_reserva(p.classe)
+            return True, "Você saiu do alistamento!", promovido
+        r = self.reserva(user_id)
+        if r:
+            self.reservas.remove(r)
+            return True, "Você saiu da reserva!", None
+        return False, "Você não estava participando.", None
+
+    def _promover_reserva(self, classe: str):
+        """Primeiro da reserva daquela classe sobe para a party (se houver vaga)."""
+        if len(self.por_classe(classe)) >= self.limites[classe]:
+            return None
+        for r in self.reservas:
+            if r.classe == classe:
+                self.reservas.remove(r)
+                self.participantes.append(r)
+                return r
+        return None
 
     # ---------- linha do tempo ----------
 
@@ -133,11 +217,12 @@ class Heroes:
         ]
         if candidatos:
             acoes.append(f"lembrete_{min(candidatos)}")
-        # Puxada automática da fila: UMA tentativa no horário da heroes (o cog
-        # marca como feita na primeira execução, esteja o shot caller na call
-        # ou não; atrasados usam /puxar)
+        # Puxada automática da fila: UMA tentativa no horário (só nos modos com
+        # puxada; o cog marca como feita na primeira execução, esteja o shot
+        # caller na call ou não; atrasados usam /puxar)
         if (
-            not self.puxada_automatica_feita
+            self.tem_puxada
+            and not self.puxada_automatica_feita
             and self.inicio <= agora < self.inicio + AUTO_PUXAR_JANELA
         ):
             acoes.append("auto_puxar")
@@ -180,7 +265,14 @@ class Heroes:
     def de_dict(cls, dados: dict) -> "Heroes":
         dados = dict(dados)
         dados["participantes"] = [Participante(**p) for p in dados.get("participantes", [])]
-        return cls(**dados)
+        dados["reservas"] = [Participante(**r) for r in dados.get("reservas", [])]
+        instancia = cls(**dados)
+        if instancia.modo not in MODOS:
+            print(
+                f"[HEROES] Aviso: modo desconhecido '{instancia.modo}' na heroes "
+                f"{instancia.id}; usando limites de heroes"
+            )
+        return instancia
 
     @classmethod
     def carregar_todas(cls) -> list:

@@ -54,20 +54,29 @@ def render_embed(heroes: Heroes, finalizado: bool = False) -> discord.Embed:
         color=COR_FINALIZADO if finalizado else COR_BORDA_ATIVA,
     )
 
-    # Lista VERTICAL com emojis específicos para cada role
+    # Lista VERTICAL com emojis específicos para cada role; a quantidade de
+    # linhas por classe vem do MODO (heroes: 1/2/6, andares: 1/2/7).
+    # max(..., len(pessoas)) garante que ninguém alistado fique invisível
+    # mesmo se um JSON vier com mais gente do que o limite atual
     linhas = []
-    tanks = heroes.por_classe("TANK")
-    linhas.append(f"{EMOJIS['TANK']} **TANK:** {f'<@{tanks[0].user_id}>' if tanks else ''}")
-    healers = heroes.por_classe("HEALER")
-    for i in range(2):
-        valor = f"<@{healers[i].user_id}>" if i < len(healers) else ""
-        linhas.append(f"{EMOJIS['HEALER']} **HEALER:** {valor}")
-    dps = heroes.por_classe("DPS")
-    for i in range(6):
-        valor = f"<@{dps[i].user_id}>" if i < len(dps) else ""
-        linhas.append(f"{EMOJIS['DPS']} **DPS:** {valor}")
+    for classe in ("TANK", "HEALER", "DPS"):
+        pessoas = heroes.por_classe(classe)
+        for i in range(max(heroes.limites[classe], len(pessoas))):
+            valor = f"<@{pessoas[i].user_id}>" if i < len(pessoas) else ""
+            linhas.append(f"{EMOJIS[classe]} **{classe}:** {valor}")
 
     embed.add_field(name="​", value="\n".join(linhas), inline=False)
+
+    # Lista de espera (aparece só quando tem alguém). Mostra no máximo 15
+    # nomes: um campo de embed aguenta 1024 caracteres, e com ~33 reservas
+    # o Discord recusaria a mensagem inteira
+    if heroes.reservas:
+        visiveis = [f"<@{r.user_id}> ({r.classe})" for r in heroes.reservas[:15]]
+        extras = len(heroes.reservas) - 15
+        if extras > 0:
+            visiveis.append(f"… e mais {extras} na reserva")
+        embed.add_field(name="🪑 RESERVA", value="\n".join(visiveis), inline=False)
+
     embed.set_footer(text=RODAPE)
     return embed
 
@@ -133,6 +142,18 @@ class AlistamentoView(View):
 
         self.add_item(participar)
         self.add_item(sair)
+
+        # O botão RESERVA só existe nos modos com lista de espera (andares)
+        heroes = cog.ativas.get(heroes_id)
+        if heroes is not None and heroes.tem_reserva:
+            reserva = Button(
+                label="RESERVA 🪑",
+                style=discord.ButtonStyle.secondary,
+                custom_id=f"heroes:{heroes_id}:reserva",
+            )
+            reserva.callback = self.reserva_callback
+            self.add_item(reserva)
+
         self.add_item(finalizar)
 
     def _heroes(self):
@@ -157,7 +178,7 @@ class AlistamentoView(View):
         )
         if sucesso:
             heroes.salvar()
-            await interaction.response.edit_message(embed=render_embed(heroes))
+            await interaction.response.edit_message(embed=render_embed(heroes), view=self)
             await interaction.followup.send(mensagem, ephemeral=True)
         else:
             await interaction.response.send_message(mensagem, ephemeral=True)
@@ -175,10 +196,43 @@ class AlistamentoView(View):
             )
             return
 
-        sucesso, mensagem = heroes.remover(interaction.user.id)
+        sucesso, mensagem, promovido = heroes.remover(interaction.user.id)
         if sucesso:
             heroes.salvar()
-            await interaction.response.edit_message(embed=render_embed(heroes))
+            await interaction.response.edit_message(embed=render_embed(heroes), view=self)
+            await interaction.followup.send(mensagem, ephemeral=True)
+            if promovido:
+                try:
+                    await interaction.channel.send(
+                        f"📢 <@{promovido.user_id}> subiu da reserva para a party "
+                        f"como **{promovido.classe}**!",
+                        delete_after=300,
+                    )
+                except discord.HTTPException:
+                    pass
+        else:
+            await interaction.response.send_message(mensagem, ephemeral=True)
+
+    async def reserva_callback(self, interaction: discord.Interaction):
+        heroes = self._heroes()
+        if not heroes:
+            await interaction.response.send_message(
+                "Este alistamento não está mais ativo.", ephemeral=True
+            )
+            return
+        if interaction.user.id == heroes.criador_id:
+            await interaction.response.send_message(
+                "Você é o SHOT CALLER e não pode se inscrever!", ephemeral=True
+            )
+            return
+
+        cargos = [role.id for role in interaction.user.roles]
+        sucesso, mensagem = heroes.adicionar_reserva(
+            interaction.user.id, interaction.user.display_name, cargos, config.ROLE_IDS
+        )
+        if sucesso:
+            heroes.salvar()
+            await interaction.response.edit_message(embed=render_embed(heroes), view=self)
             await interaction.followup.send(mensagem, ephemeral=True)
         else:
             await interaction.response.send_message(mensagem, ephemeral=True)
@@ -365,14 +419,19 @@ class Alistamento(commands.Cog):
         mencoes = " ".join(
             [f"<@{heroes.criador_id}>"] + [f"<@{p.user_id}>" for p in heroes.participantes]
         )
-        fila = f" <#{config.CANAL_FILA_ID}>" if config.CANAL_FILA_ID else " de fila"
+        # Andares não usa a fila: o lembrete é só o "vai começar"
+        if heroes.tem_puxada:
+            fila = f" <#{config.CANAL_FILA_ID}>" if config.CANAL_FILA_ID else " de fila"
+            chamada = f"Entrem no canal{fila}!"
+        else:
+            chamada = "Preparem-se!"
         # O lembrete se auto-apaga quando o próximo evento chega (o lembrete
         # seguinte ou o início da heroes), para não acumular sujeira no chat
         menores = [m for m in LEMBRETE_ANTECEDENCIAS_MIN if m < minutos]
         vida = max(60, (restam - (max(menores) if menores else 0)) * 60)
         mensagem = await canal.send(
             f"{mencoes}\n⏰ O Evento **{heroes.boss}** começa em **{restam} minutos**! "
-            f"Entrem no canal{fila}!",
+            f"{chamada}",
             delete_after=vida,
         )
         # Registra a mensagem: o delete_after morre se o bot reiniciar, e aí
@@ -523,6 +582,7 @@ class Alistamento(commands.Cog):
                 finalizada_em=datetime.now(config.TIMEZONE).isoformat(),
                 finalizada_por=finalizada_por,
                 participantes=[(p.user_id, p.nome, p.classe) for p in heroes.participantes],
+                modo=heroes.modo,
             )
 
             # 2. Encerra o estado vivo ANTES do I/O com o Discord: se o bot cair
@@ -587,6 +647,23 @@ class Alistamento(commands.Cog):
         mastery: str
     ):
         """Cria um alistamento para boss com seleções para boss e dia"""
+        if boss not in BOSSES:
+            await interaction.response.send_message(
+                f"❌ Boss inválido! Opções disponíveis: {', '.join(BOSSES)}", ephemeral=True
+            )
+            return
+        await self._criar_alistamento(interaction, boss, dia, hora, mastery, modo="heroes")
+
+    async def _criar_alistamento(
+        self,
+        interaction: discord.Interaction,
+        titulo: str,
+        dia: str,
+        hora: str,
+        mastery: str,
+        modo: str,
+    ):
+        """Fluxo comum de criação, usado por /alistamento (heroes) e /andares."""
         # Verificar permissão
         user_roles = [role.id for role in interaction.user.roles]
         user_has_permission = (
@@ -599,9 +676,10 @@ class Alistamento(commands.Cog):
             )
             return
 
-        # 1 alistamento aberto por pessoa: finalize o atual antes de abrir outro
+        # 1 alistamento aberto por pessoa POR MODO (dá para ter 1 heroes e
+        # 1 andares ao mesmo tempo; são atividades independentes)
         for aberta in self.ativas.values():
-            if aberta.criador_id == interaction.user.id:
+            if aberta.criador_id == interaction.user.id and aberta.modo == modo:
                 link = (
                     f"https://discord.com/channels/{interaction.guild_id}"
                     f"/{aberta.channel_id}/{aberta.message_id}"
@@ -613,13 +691,6 @@ class Alistamento(commands.Cog):
                     ephemeral=True,
                 )
                 return
-
-        # Validar boss
-        if boss not in BOSSES:
-            await interaction.response.send_message(
-                f"❌ Boss inválido! Opções disponíveis: {', '.join(BOSSES)}", ephemeral=True
-            )
-            return
 
         # Validar dia
         if dia.upper() not in DIAS_SEMANA:
@@ -646,7 +717,8 @@ class Alistamento(commands.Cog):
         agora = datetime.now(config.TIMEZONE)
         inicio = proxima_ocorrencia(dia, hora, agora)
         heroes = Heroes(
-            boss=boss,
+            boss=titulo,
+            modo=modo,
             dia=dia.upper(),
             hora=hora,
             mastery=mastery,
@@ -704,6 +776,41 @@ class Alistamento(commands.Cog):
         return filtered[:25]
 
     # ------------------------------------------------------------------
+    # /andares: mesmo ciclo de vida, party de andares (1 TANK, 2 HEALER, 7 DPS)
+    # ------------------------------------------------------------------
+
+    @app_commands.command(name="andares", description="Cria um alistamento para andares (1 TANK, 2 HEALER, 7 DPS)")
+    @app_commands.guild_only()
+    @app_commands.describe(
+        andar="Quais andares (ex: 80, 90-100)",
+        dia="Dia da Semana",
+        hora="Formato 00:00",
+        mastery="Mastery requerida"
+    )
+    async def andares(
+        self,
+        interaction: discord.Interaction,
+        andar: str,
+        dia: str,
+        hora: str,
+        mastery: str
+    ):
+        """Cria um alistamento de andares com a party 1 TANK / 2 HEALER / 7 DPS"""
+        andar = andar.strip()
+        if not andar or len(andar) > 40:
+            await interaction.response.send_message(
+                "❌ Informe quais andares (ex: **80** ou **90-100**)!", ephemeral=True
+            )
+            return
+        await self._criar_alistamento(
+            interaction, f"ANDARES {andar.upper()}", dia, hora, mastery, modo="andares"
+        )
+
+    @andares.autocomplete("dia")
+    async def dia_autocomplete_andares(self, interaction: discord.Interaction, current: str) -> list[app_commands.Choice[str]]:
+        return await self.dia_autocomplete(interaction, current)
+
+    # ------------------------------------------------------------------
     # /puxar: move quem está no canal de fila para a call de quem chamou
     # ------------------------------------------------------------------
 
@@ -730,17 +837,17 @@ class Alistamento(commands.Cog):
             )
             return
 
-        # O /puxar é do caller: exige um alistamento ativo SEU, e é a lista de
-        # inscritos dele que define quem sai da fila
+        # O /puxar é do caller: exige um alistamento de HEROES ativo seu, e é a
+        # lista de inscritos dele que define quem sai da fila (andares não usa)
         minha_heroes = None
         for aberta in self.ativas.values():
-            if aberta.criador_id == interaction.user.id:
+            if aberta.criador_id == interaction.user.id and aberta.tem_puxada:
                 minha_heroes = aberta
                 break
         if minha_heroes is None:
             await interaction.response.send_message(
-                "❌ O /puxar é para o caller: você precisa ter um alistamento ativo "
-                "para puxar os inscritos dele.",
+                "❌ O /puxar é para o caller de heroes: você precisa ter um "
+                "alistamento de heroes ativo para puxar os inscritos dele.",
                 ephemeral=True,
             )
             return

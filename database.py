@@ -96,9 +96,17 @@ def init_db():
                 criador_nome   TEXT,
                 agendada_para  TEXT NOT NULL,      -- ISO 8601
                 finalizada_em  TEXT NOT NULL,      -- ISO 8601
-                finalizada_por TEXT NOT NULL       -- nome de quem finalizou ou 'auto'
+                finalizada_por TEXT NOT NULL,      -- nome de quem finalizou ou 'auto'
+                modo           TEXT DEFAULT 'heroes'  -- heroes / andares
             )
         ''')
+
+        # Migração: bancos criados antes do modo "andares" ganham a coluna
+        c.execute("PRAGMA table_info(heroes_historico)")
+        cols_historico = [col[1] for col in c.fetchall()]
+        if "modo" not in cols_historico:
+            c.execute("ALTER TABLE heroes_historico ADD COLUMN modo TEXT DEFAULT 'heroes'")
+            print("[DB] Migração: coluna 'modo' adicionada em heroes_historico")
         c.execute('''
             CREATE TABLE IF NOT EXISTS heroes_participacao (
                 heroes_id TEXT NOT NULL,
@@ -207,6 +215,7 @@ def registrar_heroes_finalizada(
     finalizada_em: str,
     finalizada_por: str,
     participantes: List[Tuple[int, str, str]],  # (user_id, nome, classe)
+    modo: str = "heroes",
 ) -> None:
     """
     Grava uma heroes finalizada no histórico permanente.
@@ -219,10 +228,10 @@ def registrar_heroes_finalizada(
         conn.execute('''
             INSERT OR IGNORE INTO heroes_historico
                 (id, boss, mastery, criador_id, criador_nome,
-                 agendada_para, finalizada_em, finalizada_por)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 agendada_para, finalizada_em, finalizada_por, modo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (heroes_id, boss, mastery, criador_id, criador_nome,
-              agendada_para, finalizada_em, finalizada_por))
+              agendada_para, finalizada_em, finalizada_por, modo))
         # Limpa e regrava os participantes na mesma transação (idempotente)
         conn.execute("DELETE FROM heroes_participacao WHERE heroes_id = ?", (heroes_id,))
         conn.executemany('''
