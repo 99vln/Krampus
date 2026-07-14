@@ -3,3 +3,4 @@
 /data/
 __pycache__/
 *.pyc
+bot_data.db
