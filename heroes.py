@@ -20,7 +20,7 @@ LIMITES_POR_CLASSE = {"TANK": 1, "HEALER": 2, "DPS": 6}
 
 # Prazos do ciclo de vida (sempre relativos ao horário AGENDADO da heroes)
 LEMBRETE_ANTECEDENCIAS_MIN = [15, 5]          # avisos antes de começar
-AUTO_PUXAR_JANELA = timedelta(minutes=10)     # janela p/ puxar a fila após o início
+AUTO_PUXAR_JANELA = timedelta(minutes=3)      # tolerância p/ o tick do relógio pegar o início (a tentativa é ÚNICA)
 AVISO_CRIADOR_APOS = timedelta(minutes=30)    # DM perguntando se pode finalizar
 AUTO_FINALIZAR_APOS = timedelta(hours=5)      # bot finaliza sozinho
 
@@ -133,8 +133,9 @@ class Heroes:
         ]
         if candidatos:
             acoes.append(f"lembrete_{min(candidatos)}")
-        # Puxada automática da fila: fica pendente durante a janela pós-início
-        # até o cog conseguir executá-la (o shot caller pode se atrasar)
+        # Puxada automática da fila: UMA tentativa no horário da heroes (o cog
+        # marca como feita na primeira execução, esteja o shot caller na call
+        # ou não; atrasados usam /puxar)
         if (
             not self.puxada_automatica_feita
             and self.inicio <= agora < self.inicio + AUTO_PUXAR_JANELA

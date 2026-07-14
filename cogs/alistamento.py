@@ -422,24 +422,24 @@ class Alistamento(commands.Cog):
         return movidos, falhas
 
     async def _puxar_fila_automatico(self, heroes: Heroes):
-        """No início da heroes: se o shot caller já está numa call válida, puxa
-        quem espera na fila para junto dele. Enquanto ele não conectar, tenta de
-        novo a cada tick, até a janela AUTO_PUXAR_JANELA fechar."""
-        if not config.CANAL_FILA_ID:
-            # Sem fila configurada não há o que puxar; encerra a janela
-            heroes.puxada_automatica_feita = True
-            heroes.salvar()
-            return
-
+        """No horário da heroes: UMA única tentativa. Se o shot caller não
+        estiver num canal de heroes nesse momento, ninguém é puxado (ele usa
+        /puxar); quem não estiver na fila nesse momento fica de fora."""
         canal_texto = await self._canal(heroes.channel_id)
         if canal_texto is None or canal_texto.guild is None:
-            return  # sem acesso ao servidor agora; tenta no próximo tick
+            return  # sem acesso ao servidor NESTE tick; a janela dá nova chance
+
+        # A tentativa é única: aconteça o que acontecer daqui para baixo,
+        # não repete (marca antes de mover; padrão da casa)
+        heroes.puxada_automatica_feita = True
+        heroes.salvar()
+
+        if not config.CANAL_FILA_ID:
+            return
 
         guild = canal_texto.guild
         fila = guild.get_channel(config.CANAL_FILA_ID)
         if not isinstance(fila, (discord.VoiceChannel, discord.StageChannel)):
-            heroes.puxada_automatica_feita = True
-            heroes.salvar()
             print(f"[HEROES] CANAL_FILA {config.CANAL_FILA_ID} não é canal de voz; puxada automática desativada")
             return
 
@@ -451,13 +451,9 @@ class Alistamento(commands.Cog):
                 criador = None
         voz = criador.voice.channel if (criador and criador.voice) else None
         if voz is None or voz.id == fila.id:
-            return  # shot caller ainda não está na call da heroes; tenta depois
+            return  # shot caller fora de call de heroes: /puxar manual resolve
         if config.CANAIS_HEROES and voz.id not in config.CANAIS_HEROES:
             return  # está numa call que não é de heroes; não puxa ninguém
-
-        # Marca ANTES de mover (padrão da casa: nunca repetir em caso de erro)
-        heroes.puxada_automatica_feita = True
-        heroes.salvar()
 
         if not fila.members:
             return
@@ -719,6 +715,13 @@ class Alistamento(commands.Cog):
             )
             return
         destino = interaction.user.voice.channel
+        if config.CANAIS_HEROES and destino.id not in config.CANAIS_HEROES:
+            canais = ", ".join(f"<#{c}>" for c in config.CANAIS_HEROES)
+            await interaction.response.send_message(
+                f"❌ Você precisa estar em um dos canais de heroes para puxar a fila: {canais}",
+                ephemeral=True,
+            )
+            return
 
         origem = fila
         if origem is None and config.CANAL_FILA_ID:
