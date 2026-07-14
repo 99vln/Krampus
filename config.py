@@ -1,6 +1,7 @@
 # config.py
 import os
-from zoneinfo import ZoneInfo
+from datetime import timezone, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,7 +15,17 @@ def _env_int(nome: str, padrao: int) -> int:
 
 
 # Fuso horário da guild (usado para agendar as heroes)
-TIMEZONE = ZoneInfo(os.getenv("GUILD_TIMEZONE", "America/Sao_Paulo"))
+_tz_nome = os.getenv("GUILD_TIMEZONE", "America/Sao_Paulo")
+try:
+    TIMEZONE = ZoneInfo(_tz_nome)
+except ZoneInfoNotFoundError:
+    # Sem a base de fusos horários (no Windows ela vem do pacote pip "tzdata").
+    # Cai para UTC-3 fixo (horário de Brasília) em vez de derrubar os cogs.
+    TIMEZONE = timezone(timedelta(hours=-3), "UTC-3")
+    print(
+        f"[CONFIG] ⚠️ Fuso '{_tz_nome}' não encontrado; usando UTC-3 fixo. "
+        f"Para corrigir: pip install -r requirements.txt"
+    )
 
 # IDs dos cargos por classe (DPS, TANK, HEALER)
 ROLE_IDS = {

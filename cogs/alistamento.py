@@ -67,19 +67,29 @@ def render_embed(heroes: Heroes, finalizado: bool = False) -> discord.Embed:
 
 
 class BotaoOrfao(DynamicItem[Button], template=r"heroes:(?P<hid>[0-9a-f]+):(?P<acao>[a-z_]+)"):
-    """Rede de segurança: captura cliques em botões de heroes que o bot não
+    """Rede de segurança: responde cliques em botões de heroes que o bot não
     conhece mais (ex: a mensagem sobreviveu mas o estado se perdeu). Sem isso,
     o usuário veria só o erro genérico "Esta interação falhou" do Discord.
-    Só é consultado quando NENHUMA view registrada corresponde ao botão."""
 
-    def __init__(self, custom_id: str):
+    CUIDADO: o discord.py despacha dynamic items para TODO clique cujo
+    custom_id case com o template, EM PARALELO com a view registrada da
+    mensagem (ui/view.py: dispatch_view chama dispatch_dynamic_items
+    incondicionalmente). Por isso este callback PRECISA ficar mudo quando a
+    heroes ainda está ativa, senão ele "rouba" a resposta do botão real e o
+    clique legítimo morre com erro 40060 (already acknowledged)."""
+
+    def __init__(self, custom_id: str, heroes_id: str = ""):
         super().__init__(Button(label="expirado", custom_id=custom_id))
+        self.heroes_id = heroes_id
 
     @classmethod
     async def from_custom_id(cls, interaction, item, match):
-        return cls(match.string)
+        return cls(match.string, match["hid"])
 
     async def callback(self, interaction: discord.Interaction):
+        cog = interaction.client.get_cog("Alistamento")
+        if cog and self.heroes_id in cog.ativas:
+            return  # heroes viva: a view real responde este clique
         await interaction.response.send_message(
             "Este alistamento não está mais ativo.", ephemeral=True
         )
@@ -517,7 +527,15 @@ class Alistamento(commands.Cog):
 
         view = AlistamentoView(self, heroes.id)
         self._registrar_view(heroes.id, view)
-        resposta = await interaction.response.send_message(embed=render_embed(heroes), view=view)
+        try:
+            resposta = await interaction.response.send_message(embed=render_embed(heroes), view=view)
+        except discord.HTTPException:
+            # A mensagem não foi publicada: desfaz o rastreio para não deixar
+            # uma heroes fantasma sem mensagem mandando lembretes no canal
+            self.ativas.pop(heroes.id, None)
+            heroes.apagar_json()
+            self._parar_views(heroes.id)
+            raise
 
         # Guarda o id da mensagem para conseguir apagá-la/reativá-la depois
         try:
