@@ -405,13 +405,17 @@ class Alistamento(commands.Cog):
             if heroes.id in self.ativas:
                 heroes.salvar()
 
-    async def _mover_membros(self, origem, destino, motivo: str):
-        """Move todos de um canal de voz para outro; devolve (movidos, falhas).
-        Ignora bots e quem já saiu do canal durante o processo."""
-        movidos, falhas = 0, 0
+    async def _mover_membros(self, origem, destino, motivo: str, permitidos: set = None):
+        """Move membros de um canal de voz para outro; devolve (movidos, falhas,
+        deixados). Com `permitidos`, move só esses user_ids e conta em `deixados`
+        quem ficou por não estar na lista. Ignora bots e quem já saiu do canal."""
+        movidos, falhas, deixados = 0, 0, 0
         for membro in list(origem.members):
             if membro.bot:
                 continue
+            if permitidos is not None and membro.id not in permitidos:
+                deixados += 1
+                continue  # não inscrito: fica na fila
             if membro.voice is None or membro.voice.channel != origem:
                 continue  # saiu da fila enquanto movíamos os outros
             try:
@@ -419,7 +423,7 @@ class Alistamento(commands.Cog):
                 movidos += 1
             except discord.HTTPException:
                 falhas += 1
-        return movidos, falhas
+        return movidos, falhas, deixados
 
     async def _puxar_fila_automatico(self, heroes: Heroes):
         """No horário da heroes: UMA única tentativa. Se o shot caller não
@@ -457,11 +461,15 @@ class Alistamento(commands.Cog):
 
         if not fila.members:
             return
-        movidos, falhas = await self._mover_membros(
-            fila, voz, f"Início da heroes {heroes.boss}"
+        # Só os inscritos DESTA heroes (+ o shot caller) são puxados
+        inscritos = {p.user_id for p in heroes.participantes} | {heroes.criador_id}
+        movidos, falhas, deixados = await self._mover_membros(
+            fila, voz, f"Início da heroes {heroes.boss}", permitidos=inscritos
         )
-        if movidos or falhas:
+        if movidos or falhas or deixados:
             aviso = f"🎺 Puxei **{movidos}** pessoa(s) da fila {fila.mention} para {voz.mention}!"
+            if deixados:
+                aviso += f" ({deixados} ficaram por não estarem inscritas)"
             if falhas:
                 aviso += f" ({falhas} não puderam ser movidas)"
             try:
@@ -741,18 +749,36 @@ class Alistamento(commands.Cog):
             )
             return
 
+        # Filtro: só inscritos das heroes ativas. Sem nenhuma heroes ativa,
+        # o comando vira ferramenta bruta e puxa todo mundo da fila
+        permitidos = None
+        if self.ativas:
+            permitidos = set()
+            for h in self.ativas.values():
+                permitidos.add(h.criador_id)
+                permitidos.update(p.user_id for p in h.participantes)
+
         # Mover várias pessoas leva mais de 3s; defer segura a interação aberta
         await interaction.response.defer(ephemeral=True)
-        movidos, falhas = await self._mover_membros(
-            origem, destino, f"/puxar por {interaction.user.display_name}"
+        movidos, falhas, deixados = await self._mover_membros(
+            origem, destino, f"/puxar por {interaction.user.display_name}", permitidos=permitidos
         )
 
         if movidos == 0 and falhas == 0:
-            await interaction.followup.send(
-                f"O canal {origem.mention} está vazio, ninguém para puxar.", ephemeral=True
-            )
+            if deixados:
+                await interaction.followup.send(
+                    f"Ninguém foi puxado: **{deixados}** pessoa(s) na fila, mas nenhuma "
+                    f"inscrita em heroes ativa.",
+                    ephemeral=True,
+                )
+            else:
+                await interaction.followup.send(
+                    f"O canal {origem.mention} está vazio, ninguém para puxar.", ephemeral=True
+                )
             return
         resposta = f"✅ **{movidos}** pessoa(s) puxada(s) de {origem.mention} para {destino.mention}."
+        if deixados:
+            resposta += f"\n👥 **{deixados}** ficaram na fila por não estarem inscritas em nenhuma heroes ativa."
         if falhas:
             resposta += (
                 f"\n⚠️ **{falhas}** não puderam ser movidas. Confira se tenho a permissão "
