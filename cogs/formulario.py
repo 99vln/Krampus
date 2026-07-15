@@ -181,6 +181,7 @@ class FormularioCog(commands.Cog):
         self.CARGOS_APROVACAO = [
             1449931317675429960,  # Dev
             1442625294078050456,   # Staff
+            1452881617726083256,  # Recrutador
         ]
 
         # Inicializa o banco de dados (se ainda não existir)
