@@ -319,18 +319,6 @@ class FormularioCog(commands.Cog):
             )
         )
 
-        await self.resultados_channel.send(
-            embed=embed,
-            view=AprovacaoView(
-                self,
-                interaction.user.id,
-                str(interaction.user),
-                nick,
-                classe,
-                recrutador
-            )
-        )
-
         confirmacao_embed = discord.Embed(
             title="Formulário Enviado! ✅",
             description="**Seu formulário foi enviado com sucesso, aguarde a aprovação!**\n\n"
