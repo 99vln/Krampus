@@ -20,6 +20,7 @@ LIMITES_POR_CLASSE = {"TANK": 1, "HEALER": 2, "DPS": 6}
 
 # Prazos do ciclo de vida (sempre relativos ao horário AGENDADO da heroes)
 LEMBRETE_ANTECEDENCIAS_MIN = [15, 5]          # avisos antes de começar
+AUTO_PUXAR_JANELA = timedelta(minutes=3)      # tolerância p/ o tick do relógio pegar o início (a tentativa é ÚNICA)
 AVISO_CRIADOR_APOS = timedelta(minutes=30)    # DM perguntando se pode finalizar
 AUTO_FINALIZAR_APOS = timedelta(hours=5)      # bot finaliza sozinho
 
@@ -63,6 +64,11 @@ class Heroes:
     participantes: list = field(default_factory=list)  # list[Participante]
     # Flags de eventos já disparados (para não repetir após restart)
     lembretes_enviados: list = field(default_factory=list)  # ex: [15, 5]
+    # Mensagens de lembrete enviadas: [{message_id, channel_id, apagar_em}]
+    # (o delete_after do discord.py morre se o bot reiniciar; com o registro
+    # aqui, o relógio apaga as vencidas mesmo depois de um restart)
+    lembretes_mensagens: list = field(default_factory=list)
+    puxada_automatica_feita: bool = False
     aviso_criador_enviado: bool = False
 
     # ---------- participantes ----------
@@ -127,6 +133,14 @@ class Heroes:
         ]
         if candidatos:
             acoes.append(f"lembrete_{min(candidatos)}")
+        # Puxada automática da fila: UMA tentativa no horário da heroes (o cog
+        # marca como feita na primeira execução, esteja o shot caller na call
+        # ou não; atrasados usam /puxar)
+        if (
+            not self.puxada_automatica_feita
+            and self.inicio <= agora < self.inicio + AUTO_PUXAR_JANELA
+        ):
+            acoes.append("auto_puxar")
         if (
             not self.aviso_criador_enviado
             and self.inicio + AVISO_CRIADOR_APOS <= agora < self.inicio + AUTO_FINALIZAR_APOS

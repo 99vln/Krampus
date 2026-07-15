@@ -117,7 +117,24 @@ class TestLinhaDoTempo(unittest.TestCase):
 
     def test_lembrete_perdido_nao_dispara_depois_do_inicio(self):
         acoes = self.h.acoes_pendentes(self.INICIO + timedelta(minutes=1))
-        self.assertEqual(acoes, [])
+        self.assertNotIn("lembrete_15", acoes)
+        self.assertNotIn("lembrete_5", acoes)
+
+    def test_puxada_automatica_no_horario(self):
+        acoes = self.h.acoes_pendentes(self.INICIO)
+        self.assertEqual(acoes, ["auto_puxar"])
+        # a janela curta existe só para o tick de 60s não perder o início
+        acoes = self.h.acoes_pendentes(self.INICIO + timedelta(minutes=2))
+        self.assertEqual(acoes, ["auto_puxar"])
+
+    def test_puxada_automatica_nao_dispara_antes_nem_depois_da_janela(self):
+        self.assertNotIn("auto_puxar", self.h.acoes_pendentes(self.INICIO - timedelta(minutes=1)))
+        # bot desligado no horário = tentativa perdida, ninguém é puxado atrasado
+        self.assertNotIn("auto_puxar", self.h.acoes_pendentes(self.INICIO + timedelta(minutes=4)))
+
+    def test_puxada_automatica_nao_repete_depois_de_feita(self):
+        self.h.puxada_automatica_feita = True
+        self.assertEqual(self.h.acoes_pendentes(self.INICIO + timedelta(minutes=2)), [])
 
     def test_aviso_criador_30_min_depois(self):
         acoes = self.h.acoes_pendentes(self.INICIO + timedelta(minutes=30))

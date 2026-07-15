@@ -15,7 +15,7 @@ class Krampus(commands.Bot):
         intents.members = True
         intents.guilds = True
         intents.presences = False
-        intents.voice_states = False
+        intents.voice_states = True  # necessário p/ /puxar e puxada automática (Member.voice, VoiceChannel.members)
         intents.message_content = False
         super().__init__(command_prefix="/", intents=intents)
 

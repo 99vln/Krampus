@@ -14,6 +14,14 @@ def _env_int(nome: str, padrao: int) -> int:
     return int(valor) if valor else padrao
 
 
+def _env_int_list(nome: str, padrao: list) -> list:
+    """Lista de IDs separados por vírgula no .env (ex: CANAIS_HEROES=111,222)."""
+    valor = os.getenv(nome)
+    if not valor:
+        return padrao
+    return [int(parte.strip()) for parte in valor.split(",") if parte.strip()]
+
+
 # Fuso horário da guild (usado para agendar as heroes)
 _tz_nome = os.getenv("GUILD_TIMEZONE", "America/Sao_Paulo")
 try:
@@ -60,5 +68,15 @@ CANAL_LOGS_TRANSCRIPTS_ID = _env_int("CANAL_LOGS_TRANSCRIPTS", 14700707556046972
 # Canal de logs dos alistamentos finalizados (antes hardcoded em cogs/alistamento.py)
 CANAL_LOGS_ALISTAMENTO_ID = _env_int("CANAL_LOGS_ALISTAMENTO", 1450014685725200416)
 
-# Canal de fila mencionado nos lembretes de heroes (0 = só texto, sem link)
-CANAL_FILA_ID = _env_int("CANAL_FILA", 0)
+# Canal de voz da fila (lembretes mencionam; é de onde a puxada tira as pessoas)
+CANAL_FILA_ID = _env_int("CANAL_FILA", 1454593636862922913)
+
+# Canais de voz onde acontecem as heroes. A puxada (automática E /puxar) só
+# funciona com destino num deles; vazio via .env = sem restrição
+CANAIS_HEROES = _env_int_list("CANAIS_HEROES", [
+    1449864968173522954,  # heroes 1
+    1460046679553212711,  # heroes 2
+    1477761550000324700,  # heroes 3
+    1480310264837705930,  # heroes 4
+    1505647409991258280,  # heroes 5
+])
