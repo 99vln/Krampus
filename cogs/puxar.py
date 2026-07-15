@@ -2,16 +2,16 @@
 # Comando /puxar: o caller puxa os inscritos do SEU alistamento de heroes
 # do canal de fila para a call de heroes onde ele está.
 #
-# Este arquivo é SÓ a interface do comando. O estado (alistamentos ativos)
-# e a lógica de mover membros vivem no cog Alistamento (cogs/alistamento.py),
-# acessados via bot.get_cog("Alistamento").
-# Vantagem de estar separado: um erro aqui derruba só o /puxar.
+# Este arquivo tem SÓ o comando. O estado (alistamentos ativos) e a lógica
+# de mover membros vivem em motor_alistamento.py, importado diretamente.
+# Vantagem: um erro em outro cog não afeta o /puxar.
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
 import config
+import motor_alistamento as motor
 
 
 class Puxar(commands.Cog):
@@ -29,13 +29,6 @@ class Puxar(commands.Cog):
         interaction: discord.Interaction,
         fila: discord.VoiceChannel | discord.StageChannel | None = None,
     ):
-        alistamentos = self.bot.get_cog("Alistamento")
-        if alistamentos is None:
-            await interaction.response.send_message(
-                "❌ O módulo de alistamento não está carregado.", ephemeral=True
-            )
-            return
-
         # Staff/admin apenas
         cargos = [role.id for role in interaction.user.roles]
         pode = (
@@ -51,7 +44,7 @@ class Puxar(commands.Cog):
         # O /puxar é do caller: exige um alistamento de HEROES ativo seu, e é a
         # lista de inscritos dele que define quem sai da fila (andares não usa)
         minha_heroes = None
-        for aberta in alistamentos.ativas.values():
+        for aberta in motor.ativas.values():
             if aberta.criador_id == interaction.user.id and aberta.tem_puxada:
                 minha_heroes = aberta
                 break
@@ -102,7 +95,7 @@ class Puxar(commands.Cog):
 
         # Mover várias pessoas leva mais de 3s; defer segura a interação aberta
         await interaction.response.defer(ephemeral=True)
-        movidos, falhas, deixados = await alistamentos.mover_membros(
+        movidos, falhas, deixados = await motor.mover_membros(
             origem, destino, f"/puxar por {interaction.user.display_name}", permitidos=permitidos
         )
 
@@ -137,4 +130,5 @@ class Puxar(commands.Cog):
 
 
 async def setup(bot):
+    motor.inicializar(bot)
     await bot.add_cog(Puxar(bot))

@@ -1,16 +1,16 @@
 # cogs/andares.py
-# Comando /andares: alistamento no modo andares (1 TANK / 2 HEALER / 7 DPS).
+# Comando /andares: alistamento no modo andares (1 TANK / 2 HEALER / 7 DPS,
+# com botão RESERVA). Andares não usa fila nem puxada: só organização.
 #
-# Este arquivo é SÓ a interface do comando. Todo o motor (embed, botões,
-# reserva, lembretes, finalização, histórico) vive no cog Alistamento
-# (cogs/alistamento.py) e é acessado via bot.get_cog("Alistamento"),
-# o mesmo padrão que o formulário usa para falar com o ticket.
-# Vantagem de estar separado: um erro aqui derruba só o /andares.
+# Este arquivo tem SÓ o comando. Toda a lógica compartilhada (estado, embed,
+# botões, reserva, finalização) vive em motor_alistamento.py, importado
+# diretamente. Vantagem: um erro em outro cog não afeta o /andares.
 
 import discord
 from discord import app_commands
 from discord.ext import commands
 
+import motor_alistamento as motor
 from heroes import DIAS_SEMANA
 
 
@@ -38,24 +38,14 @@ class Andares(commands.Cog):
         mastery: str
     ):
         """Cria um alistamento de andares com a party 1 TANK / 2 HEALER / 7 DPS"""
-        alistamentos = self.bot.get_cog("Alistamento")
-        if alistamentos is None:
-            await interaction.response.send_message(
-                "❌ O módulo de alistamento não está carregado.", ephemeral=True
-            )
-            return
-
         andar = andar.strip()
         if not andar or len(andar) > 40:
             await interaction.response.send_message(
                 "❌ Informe quais andares (ex: **80** ou **90-100**)!", ephemeral=True
             )
             return
-
-        # O título do alistamento vira "ANDARES <andar>"
-        titulo = f"ANDARES {andar.upper()}"
         await alistamentos.criar_alistamento(
-            interaction, titulo, dia, hora, mastery, modo="andares"
+            interaction, f"ANDARES {andar.upper()}", dia, hora, mastery, modo="andares"
         )
 
     @andares.autocomplete("dia")
@@ -98,4 +88,5 @@ class Andares(commands.Cog):
 
 
 async def setup(bot):
+    motor.inicializar(bot)
     await bot.add_cog(Andares(bot))
