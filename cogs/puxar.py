@@ -29,10 +29,10 @@ class Puxar(commands.Cog):
         interaction: discord.Interaction,
         fila: discord.VoiceChannel | discord.StageChannel | None = None,
     ):
-        # Staff/admin apenas
+        # Mesmos cargos que podem criar alistamentos (staff + callers extras)
         cargos = [role.id for role in interaction.user.roles]
         pode = (
-            any(role_id in config.CARGOS_STAFF for role_id in cargos)
+            any(role_id in config.CARGOS_ALISTAMENTO for role_id in cargos)
             or interaction.user.guild_permissions.administrator
         )
         if not pode:

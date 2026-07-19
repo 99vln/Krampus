@@ -62,9 +62,10 @@ CARGOS_STAFF = [
     _env_int("ROLE_STAFF", 1442625294078050456),  # STAFF
 ]
 
-# Cargos que podem CRIAR alistamentos (/alistamento e /andares). Staff sempre
-# pode; os extras da lista ganham SÓ isso (não ganham /puxar nem acesso de
-# staff aos tickets, que continuam usando CARGOS_STAFF)
+# Cargos de CALLER: podem criar alistamentos (/alistamento e /andares) e usar
+# o /puxar. Staff sempre pode; os extras da lista ganham SÓ isso (não ganham
+# acesso de staff aos tickets nem finalizam alistamento dos outros, que
+# continuam usando CARGOS_STAFF)
 CARGOS_ALISTAMENTO = CARGOS_STAFF + [
     _env_int("ROLE_ALISTAMENTO", 1528406116394860746),
 ]
