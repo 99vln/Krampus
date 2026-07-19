@@ -44,7 +44,7 @@ class Andares(commands.Cog):
                 "❌ Informe quais andares (ex: **80** ou **90-100**)!", ephemeral=True
             )
             return
-        await alistamentos.criar_alistamento(
+        await motor.criar_alistamento(
             interaction, f"ANDARES {andar.upper()}", dia, hora, mastery, modo="andares"
         )
 
