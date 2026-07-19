@@ -402,7 +402,7 @@ async def criar_alistamento(
     # Verificar permissão
     user_roles = [role.id for role in interaction.user.roles]
     user_has_permission = (
-        any(role_id in config.CARGOS_STAFF for role_id in user_roles) or
+        any(role_id in config.CARGOS_ALISTAMENTO for role_id in user_roles) or
         interaction.user.guild_permissions.administrator
     )
     if not user_has_permission:
