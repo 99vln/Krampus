@@ -56,6 +56,14 @@ CATEGORY_IDS = {
     "HEALER": 1460430719489802434,
 }
 
+# IDs dos cargos de Build Leader por classe: enxergam e conversam nos tickets
+# da PRÓPRIA classe (não ganham acesso de staff nem fecham/arquivam tickets)
+BUILD_LEADER_IDS = {
+    "DPS": _env_int("ROLE_BL_DPS", 1460432950897152063),
+    "TANK": _env_int("ROLE_BL_TANK", 1460433292573802547),
+    "HEALER": _env_int("ROLE_BL_HEALER", 1460432763915079846),
+}
+
 # IDs dos cargos com permissão de staff (DEV, STAFF)
 CARGOS_STAFF = [
     _env_int("ROLE_DEV", 1449931317675429960),   # DEV

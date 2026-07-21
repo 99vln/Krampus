@@ -3,9 +3,12 @@ from discord.ext import commands
 from datetime import datetime
 import asyncio
 import io
-from config import ROLE_IDS, CATEGORY_IDS, CARGOS_STAFF, CANAL_LOGS_TRANSCRIPTS_ID, EMOJIS_POR_CLASSE
+from config import ROLE_IDS, CATEGORY_IDS, CARGOS_STAFF, BUILD_LEADER_IDS, CANAL_LOGS_TRANSCRIPTS_ID, EMOJIS_POR_CLASSE
 import database as db
 from views.ticket_view import TicketPersistentView
+
+# Categoria -> classe (para descobrir a classe de um ticket já criado)
+CLASSE_POR_CATEGORIA = {cat_id: classe for classe, cat_id in CATEGORY_IDS.items()}
 
 # ====== COG PRINCIPAL DE TICKETS ======
 class TicketCog(commands.Cog):
@@ -91,6 +94,13 @@ class TicketCog(commands.Cog):
                         view_channel=True, send_messages=True, read_message_history=True, manage_channels=True
                     )
 
+            # Build Leader da classe do ticket enxerga e conversa (sem gerenciar)
+            bl_role = guild.get_role(BUILD_LEADER_IDS.get(classe_encontrada, 0))
+            if bl_role:
+                overwrites[bl_role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True
+                )
+
             # 5. Criar canal
             channel = await categoria.create_text_channel(
                 name=nome_canal,
@@ -123,6 +133,25 @@ class TicketCog(commands.Cog):
         except Exception as e:
             print(f"❌ Erro ao criar ticket: {e}")
             return None
+
+    # ====== GARANTIR ACESSO DO BUILD LEADER ======
+    async def garantir_acesso_build_leader(self, channel: discord.TextChannel):
+        """Dá acesso ao Build Leader da classe em tickets criados antes desse cargo existir."""
+        classe = CLASSE_POR_CATEGORIA.get(channel.category_id)
+        if not classe:
+            return
+        bl_role = channel.guild.get_role(BUILD_LEADER_IDS.get(classe, 0))
+        if not bl_role or channel.overwrites_for(bl_role).view_channel:
+            return
+        try:
+            await channel.set_permissions(
+                bl_role,
+                view_channel=True, send_messages=True, read_message_history=True,
+                reason="Build Leader da classe ganhou acesso aos tickets"
+            )
+            print(f"✅ Build Leader '{bl_role.name}' adicionado ao ticket {channel.name}")
+        except discord.Forbidden:
+            print(f"❌ Sem permissão para dar acesso de Build Leader em {channel.name}")
 
     # ====== FECHAR TICKET ======
     async def fechar_ticket(self, interaction: discord.Interaction):
@@ -188,6 +217,7 @@ class TicketCog(commands.Cog):
         for channel_id, user_id, welcome_msg_id, custom_id in tickets:
             channel = self.bot.get_channel(channel_id)
             if channel:
+                await self.garantir_acesso_build_leader(channel)
                 try:
                     await channel.fetch_message(welcome_msg_id)  # verifica se a mensagem existe
                     view = TicketPersistentView(self)
