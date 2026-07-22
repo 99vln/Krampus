@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 from typing import List, Tuple
 
 # ======================================================
@@ -125,6 +126,35 @@ def init_db():
         if "custom_id" not in existing_cols_tickets:
             c.execute("ALTER TABLE active_tickets ADD COLUMN custom_id TEXT")
             print("[DB] Migração: coluna 'custom_id' adicionada em active_tickets")
+
+        # --------------------------------------------------
+        # Tabela: freebies_config
+        # Onde o /set_freebies guarda o canal (e o cargo opcional
+        # que leva o ping) dos avisos de código de Where Winds Meet.
+        # Uma linha por servidor.
+        # --------------------------------------------------
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS freebies_config (
+                guild_id INTEGER PRIMARY KEY,  -- servidor
+                canal_id INTEGER NOT NULL,     -- canal onde os códigos são postados
+                cargo_id INTEGER               -- cargo mencionado (NULL = sem ping)
+            )
+        ''')
+
+        # --------------------------------------------------
+        # Tabela: freebies_codigos
+        # Quais códigos já foram anunciados em cada servidor, para
+        # não repetir a cada verificação. Sobrevive a reinício e a
+        # redeploy (é o que faz o bot avisar só o que é novo).
+        # --------------------------------------------------
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS freebies_codigos (
+                guild_id INTEGER NOT NULL,
+                codigo   TEXT    NOT NULL,
+                visto_em TEXT    NOT NULL,  -- quando o bot viu o código
+                PRIMARY KEY (guild_id, codigo)
+            )
+        ''')
 
         #commit automatico ao sair do bloco `with` sem erros
 
@@ -322,3 +352,75 @@ def get_all_active_tickets() -> List[Tuple]:
         c = conn.cursor()
         c.execute("SELECT channel_id, user_id, welcome_message_id, custom_id FROM active_tickets")
         return c.fetchall()
+# ======================================================
+# FUNÇÕES: freebies (códigos de Where Winds Meet)
+# ======================================================
+
+def set_freebies_config(guild_id: int, canal_id: int, cargo_id: int = None) -> None:
+    """
+    Define (ou troca) o canal de freebies do servidor e o cargo que recebe o
+    ping. cargo_id None = o bot posta sem mencionar ninguém.
+    Chamado pelo /set_freebies.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute('''
+            INSERT INTO freebies_config (guild_id, canal_id, cargo_id)
+            VALUES (?, ?, ?)
+            ON CONFLICT(guild_id) DO UPDATE SET
+                canal_id = excluded.canal_id,
+                cargo_id = excluded.cargo_id
+        ''', (guild_id, canal_id, cargo_id))
+
+def get_freebies_config(guild_id: int) -> Tuple | None:
+    """
+    Devolve (canal_id, cargo_id) do servidor, ou None se ninguém configurou.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute(
+            "SELECT canal_id, cargo_id FROM freebies_config WHERE guild_id = ?",
+            (guild_id,)
+        )
+        return c.fetchone()
+
+def get_all_freebies_configs() -> List[Tuple]:
+    """
+    Devolve [(guild_id, canal_id, cargo_id), ...] de todos os servidores
+    configurados. Usado pela verificação automática, que roda sem interação.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT guild_id, canal_id, cargo_id FROM freebies_config")
+        return c.fetchall()
+
+def remove_freebies_config(guild_id: int) -> bool:
+    """
+    Desliga os avisos no servidor. Devolve True se havia algo configurado.
+
+    Os códigos já anunciados continuam salvos de propósito: se o canal for
+    reconfigurado depois, o bot não repete tudo o que já postou.
+    """
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute("DELETE FROM freebies_config WHERE guild_id = ?", (guild_id,))
+        return cur.rowcount > 0
+
+def codigos_ja_vistos(guild_id: int) -> set:
+    """Conjunto dos códigos que o bot já anunciou neste servidor."""
+    with sqlite3.connect(DB_PATH) as conn:
+        c = conn.cursor()
+        c.execute("SELECT codigo FROM freebies_codigos WHERE guild_id = ?", (guild_id,))
+        return {linha[0] for linha in c.fetchall()}
+
+def marcar_codigos_vistos(guild_id: int, codigos: List[str]) -> None:
+    """
+    Marca códigos como já anunciados. INSERT OR IGNORE: chamar duas vezes com
+    o mesmo código não quebra nem muda a data da primeira vez.
+    """
+    if not codigos:
+        return
+    agora = datetime.now().isoformat(timespec="seconds")
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO freebies_codigos (guild_id, codigo, visto_em) VALUES (?, ?, ?)",
+            [(guild_id, codigo, agora) for codigo in codigos]
+        )
