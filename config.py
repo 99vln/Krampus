@@ -7,6 +7,19 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Connection string do Postgres (Neon/Supabase) usada só pelo sistema /board
+# e pelo dashboard web. Banco isolado do SQLite (bot_data.db): os outros
+# sistemas do bot (heroes, tickets, formulário, freebies) continuam nele.
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# Chave usada pelo Flask para assinar o cookie de sessão do dashboard web.
+# Gerar com: python -c "import secrets; print(secrets.token_hex(32))"
+FLASK_SECRET_KEY = os.getenv("FLASK_SECRET_KEY")
+
+# True só em teste local (permite cookie de sessão sem HTTPS). Em produção
+# (Render) fica False por padrão — nunca colocar True lá.
+DASHBOARD_DEBUG = os.getenv("DASHBOARD_DEBUG", "false").lower() == "true"
+
 
 def _env_int(nome: str, padrao: int) -> int:
     """Permite trocar um ID pelo .env (útil no servidor de teste) sem editar código."""
@@ -76,6 +89,11 @@ CARGOS_STAFF = [
 # continuam usando CARGOS_STAFF)
 CARGOS_ALISTAMENTO = CARGOS_STAFF + [
     _env_int("ROLE_ALISTAMENTO", 1528406116394860746),
+]
+
+# Cargos com permissão de criar boards de GvG (/board): Staff já existente + Lead
+CARGOS_BOARD_LIDERANCA = CARGOS_STAFF + [
+    _env_int("ROLE_LEAD", 1037824865996111903),
 ]
 
 # ID do canal onde os transcripts serão enviados

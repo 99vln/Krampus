@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="{{ url_for('boards') }}">&larr; voltar</a></p>
+<h1>{{ board.titulo }} <span class="badge {{ board.status }}">{{ board.status }}</span></h1>
+{% if board.regras_texto %}<p>{{ board.regras_texto }}</p>{% endif %}
+<p><strong>Data:</strong> {{ board.data_evento.strftime("%d/%m/%Y %H:%M") }}</p>
+<p><strong>Criado por:</strong> &lt;discord id {{ board.criado_por_discord_id }}&gt;</p>
+
+<div class="grid">
+  {% for role in roles %}
+  <div class="card">
+    <h3>{{ role_labels[role] }} ({{ por_role[role]|length }}/{{ vagas.get(role, 0) }})</h3>
+    <ul>
+      {% for p in por_role[role] %}<li>{{ p.discord_display_name }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card">
+  <h3>Status</h3>
+  {% for status in statuses %}
+    {% if por_status[status] %}
+    <p><strong>{{ status_labels[status] }}:</strong>
+      {{ por_status[status] | map(attribute="discord_display_name") | join(", ") }}
+    </p>
+    {% endif %}
+  {% endfor %}
+  {% if not (por_status.values() | map("length") | sum) %}
+    <p>Ninguém marcou status ainda.</p>
+  {% endif %}
+</div>
+
+{% if board.status == "aberto" %}
+<form method="post" action="{{ url_for('fechar_board_route', board_id=board.id) }}"
+      onsubmit="return confirm('Encerrar este board? Ninguém mais poderá se inscrever.');">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button class="btn danger" type="submit">Encerrar board</button>
+</form>
+{% endif %}
+{% endblock %}

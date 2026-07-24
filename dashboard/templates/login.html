@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card" style="max-width:360px;margin:3rem auto;">
+  <h2>Login</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="username">Usuário</label>
+    <input type="text" id="username" name="username" required autofocus>
+    <label for="password">Senha</label>
+    <input type="password" id="password" name="password" required>
+    <button class="btn" type="submit" style="width:100%;">Entrar</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Krampus · GvG Board{% endblock %}</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e1f22; color: #e3e5e8; margin: 0;
+    }
+    nav {
+      background: #111214; padding: 1rem 1.5rem;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: .5rem;
+    }
+    nav a { color: #e3e5e8; text-decoration: none; font-weight: 600; }
+    nav a:hover { text-decoration: underline; }
+    main { padding: 1.5rem; max-width: 960px; margin: 0 auto; }
+    .flash { padding: .75rem 1rem; border-radius: 6px; margin-bottom: 1rem; }
+    .flash.error { background: #5c2b2b; color: #ffb4b4; }
+    .flash.success { background: #2b5c34; color: #b4ffc0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid #33353a; }
+    .badge { padding: .2rem .5rem; border-radius: 4px; font-size: .8rem; white-space: nowrap; }
+    .badge.aberto { background: #2b5c34; color: #b4ffc0; }
+    .badge.fechado { background: #555; color: #ddd; }
+    .badge.arquivado { background: #3a3a3a; color: #999; }
+    .btn {
+      display: inline-block; padding: .5rem 1rem; border-radius: 6px; border: none;
+      background: #5865f2; color: #fff; cursor: pointer; text-decoration: none;
+      font-weight: 600; font-size: .95rem;
+    }
+    .btn.danger { background: #da373c; }
+    input[type=text], input[type=password] {
+      width: 100%; padding: .6rem; border-radius: 6px; border: 1px solid #444;
+      background: #2b2d31; color: #e3e5e8; margin-bottom: 1rem;
+    }
+    label { font-size: .85rem; color: #b5b8bd; }
+    .card { background: #2b2d31; border-radius: 8px; padding: 1.25rem; margin-bottom: 1rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+    .grid ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+    h1 { font-size: 1.4rem; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="{{ url_for('boards') }}">Krampus · GvG Board</a>
+    {% if current_user.is_authenticated %}
+      <span>{{ current_user.username }} &middot; <a href="{{ url_for('logout') }}">sair</a></span>
+    {% endif %}
+  </nav>
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

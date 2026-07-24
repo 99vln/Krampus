@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Boards de GvG</h1>
+<table>
+  <tr><th>Título</th><th>Data</th><th>Status</th><th></th></tr>
+  {% for b in boards %}
+  <tr>
+    <td>{{ b.titulo }}</td>
+    <td>{{ b.data_evento.strftime("%d/%m/%Y %H:%M") }}</td>
+    <td><span class="badge {{ b.status }}">{{ b.status }}</span></td>
+    <td><a class="btn" href="{{ url_for('board_detail', board_id=b.id) }}">Ver</a></td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4">Nenhum board criado ainda.</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}
